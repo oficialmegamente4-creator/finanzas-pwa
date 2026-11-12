@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Controla tus ingresos y gastos de forma privada desde cualquier dispositivo." />
+    <meta name="robots" content="index,follow" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f7f8fc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Finanzas" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="FinanzasPWA" />
+    <meta property="og:description" content="Tus finanzas personales, privadas y disponibles sin conexión." />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="FinanzasPWA" />
+    <meta name="twitter:description" content="Tus finanzas personales, privadas y disponibles sin conexión." />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+    <title>FinanzasPWA · Tus finanzas en orden</title>
+    <script>
+      try {
+        const savedTheme = localStorage.getItem('finanzas:v1:settings');
+        const theme = savedTheme ? JSON.parse(savedTheme).theme : 'system';
+        const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+      } catch {
+        document.documentElement.classList.toggle('dark', matchMedia('(prefers-color-scheme: dark)').matches);
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/index-DdiSJhZD.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-T_WG2tOw.css">
+  </head>
+  <body>
+    <noscript>Activa JavaScript para usar FinanzasPWA. Tus datos se guardan en este dispositivo.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
