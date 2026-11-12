@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Obtener el código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Preparar Node.js 22
         uses: actions/setup-node@v4
         with:
@@ -36,7 +36,7 @@ jobs:
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
       - name: Preparar artefacto de Pages
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: dist
   deploy:
