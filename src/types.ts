@@ -27,6 +27,14 @@ export interface Settings {
   theme: Theme
 }
 
+export interface Budget {
+  id: string
+  category: string
+  periodStart: string
+  amount: number
+  createdAt: string
+}
+
 export interface Filters {
   type: TransactionType | 'all'
   category: string

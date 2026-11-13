@@ -10,7 +10,7 @@ interface TransactionFormProps {
   currency: string
   transaction?: Transaction | null
   initialType?: TransactionType
-  onSave: (transaction: Transaction) => void
+  onSave: (transaction: Transaction) => void | Promise<void>
   onCancel?: () => void
 }
 
@@ -34,6 +34,9 @@ export function TransactionForm({ currency, transaction, initialType = 'expense'
   const [category, setCategory] = useState(transaction?.category ?? getCategories(transaction?.type ?? initialType)[0]?.name ?? '')
   const [date, setDate] = useState(transaction?.date ?? localDateString())
   const [errors, setErrors] = useState<FormErrors>({})
+  const [submitError, setSubmitError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [draftId] = useState(() => transaction?.id ?? createId())
   const editing = Boolean(transaction)
 
   const changeType = (next: TransactionType) => {
@@ -42,7 +45,7 @@ export function TransactionForm({ currency, transaction, initialType = 'expense'
     setErrors((current) => ({ ...current, category: undefined }))
   }
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const nextErrors: FormErrors = {}
     const cleanDescription = description.trim()
@@ -53,19 +56,27 @@ export function TransactionForm({ currency, transaction, initialType = 'expense'
     if (!date || !parseLocalDate(date)) nextErrors.date = 'Elige una fecha válida.'
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0 || cents === null) return
-    onSave({
-      id: transaction?.id ?? createId(),
-      type,
-      description: cleanDescription,
-      amount: cents / 100,
-      category,
-      date,
-      createdAt: transaction?.createdAt ?? new Date().toISOString(),
-    })
+    setSaving(true)
+    setSubmitError('')
+    try {
+      await onSave({
+        id: draftId,
+        type,
+        description: cleanDescription,
+        amount: cents / 100,
+        category,
+        date,
+        createdAt: transaction?.createdAt ?? new Date().toISOString(),
+      })
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'No se pudo guardar el movimiento.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <form className="transaction-form" onSubmit={submit} noValidate>
+    <form className="transaction-form" onSubmit={(event) => void submit(event)} noValidate aria-busy={saving}>
       <div className="field-group">
         <span className="field-label" id="transaction-type-label">Tipo de movimiento</span>
         <div className="segmented-control" role="group" aria-labelledby="transaction-type-label">
@@ -98,8 +109,9 @@ export function TransactionForm({ currency, transaction, initialType = 'expense'
         {errors.category && <span className="field-error" id="category-error" role="alert">{errors.category}</span>}
       </div>
       <div className="form-actions">
-        {onCancel && <button className="button button-secondary" type="button" onClick={onCancel}>Cancelar</button>}
-        <button className="button button-primary" type="submit"><Plus size={18} aria-hidden="true" />{editing ? 'Guardar cambios' : 'Registrar movimiento'}</button>
+        {submitError && <span className="field-error form-submit-error" role="alert">{submitError}</span>}
+        {onCancel && <button className="button button-secondary" type="button" disabled={saving} onClick={onCancel}>Cancelar</button>}
+        <button className="button button-primary" type="submit" disabled={saving}><Plus size={18} aria-hidden="true" />{saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Registrar movimiento'}</button>
       </div>
     </form>
   )

@@ -60,6 +60,76 @@ export function readStoredSettings(): { data: Settings; error: string | null } {
   }
 }
 
+export function hasLegacyData(): boolean {
+  try {
+    return localStorage.getItem(TRANSACTIONS_KEY) !== null || localStorage.getItem(SETTINGS_KEY) !== null
+  } catch {
+    return false
+  }
+}
+
+export interface LegacySnapshot {
+  transactions: Transaction[]
+  settings: Settings
+  hasData: boolean
+  invalidTransactionCount: number
+  error: string | null
+}
+
+export function readLegacySnapshot(): LegacySnapshot {
+  try {
+    const rawTransactions = localStorage.getItem(TRANSACTIONS_KEY)
+    const rawSettings = localStorage.getItem(SETTINGS_KEY)
+    let transactions: Transaction[] = []
+    let invalidTransactionCount = 0
+    let transactionError: string | null = null
+    if (rawTransactions !== null) {
+      try {
+        const parsed: unknown = JSON.parse(rawTransactions)
+        if (!Array.isArray(parsed)) {
+          invalidTransactionCount = 1
+          transactionError = 'El historial local tiene un formato que no se pudo migrar.'
+        } else {
+          transactions = validateTransactions(parsed)
+          invalidTransactionCount = parsed.length - transactions.length
+        }
+      } catch {
+        invalidTransactionCount = 1
+        transactionError = 'El historial local contiene JSON dañado y se conservará en este dispositivo.'
+      }
+    }
+    const settings = readStoredSettings()
+    const settingsChanged = rawSettings !== null && (
+      settings.error !== null || settings.data.currency !== DEFAULT_SETTINGS.currency || settings.data.theme !== DEFAULT_SETTINGS.theme
+    )
+    return {
+      transactions,
+      settings: settings.data,
+      hasData: transactions.length > 0 || invalidTransactionCount > 0 || settingsChanged,
+      invalidTransactionCount,
+      error: transactionError ?? settings.error,
+    }
+  } catch {
+    return {
+      transactions: [],
+      settings: DEFAULT_SETTINGS,
+      hasData: false,
+      invalidTransactionCount: 0,
+      error: 'No se pudo acceder al almacenamiento anterior de este navegador.',
+    }
+  }
+}
+
+export function clearLegacyData(): boolean {
+  try {
+    localStorage.removeItem(TRANSACTIONS_KEY)
+    localStorage.removeItem(SETTINGS_KEY)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function saveStoredTransactions(transactions: readonly Transaction[]): boolean {
   try {
     localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions))

@@ -1,6 +1,6 @@
 # FinanzasPWA
 
-Aplicación de finanzas personales en español. Los movimientos se guardan en `localStorage` en el navegador; no requiere cuenta ni servidor. La PWA guarda sus archivos estáticos para volver a abrirla sin conexión.
+Aplicación de finanzas personales en español. Supabase Auth gestiona las cuentas y PostgreSQL guarda los movimientos, presupuestos y ajustes de cada usuario. La PWA conserva una caché separada por cuenta para consultar datos y encolar cambios sin conexión; los envía a Supabase al recuperar la conexión.
 
 ## Decisiones técnicas
 
@@ -10,7 +10,8 @@ Aplicación de finanzas personales en español. Los movimientos se guardan en `l
 - El historial, resumen y gráfica son selectores puros; la interfaz no necesita una librería de gráficos.
 - Workbox genera el service worker durante la compilación para admitir nombres de archivos con hash.
 - GitHub Pages compila con `BASE_PATH` para la subruta; Vercel usa la raíz por defecto.
-- No se sincronizan datos entre dispositivos. Usa el respaldo JSON para moverlos.
+- Supabase Auth y Row Level Security (RLS) aíslan los datos por usuario; el frontend usa únicamente la clave publicable.
+- Los datos locales de la versión anterior se migran a la primera cuenta que inicia sesión en ese navegador. Conserva un respaldo antes de migrar.
 
 ## 1. Requisitos
 
@@ -118,16 +119,74 @@ Importa el repositorio en Vercel y selecciona el preset **Vite**, el comando de 
 
 Para desinstalarla, usa la opción de quitar o desinstalar del menú de la aplicación o del navegador.
 
-## 9. Datos, actualizaciones y privacidad
+## 9. Configurar Supabase Free
 
-La instalación requiere HTTPS o `localhost`. Los datos viven en el almacenamiento local de cada navegador y dispositivo; no se sincronizan. Exporta un respaldo JSON en Ajustes e impórtalo en otro dispositivo para trasladarlos. Borrar los datos del sitio en el navegador elimina también los movimientos guardados allí.
+### Crear el proyecto y aplicar la base de datos
 
-Cuando publicas una versión nueva, la PWA la descarga en segundo plano y muestra **Nueva versión disponible**. Pulsa **Actualizar** para aplicarla. La app consulta si hay actualizaciones cada hora cuando tiene conexión.
+1. Crea un proyecto en [Supabase](https://supabase.com/dashboard) con el plan Free y guarda la contraseña de base de datos en un administrador de contraseñas. La contraseña de PostgreSQL no se usa en el frontend.
+2. Abre **SQL Editor → New query** en tu proyecto, pega el contenido completo de `supabase/migrations/20261112000000_finanzas_cloud.sql` y ejecútalo. La migración crea `profiles`, `categories`, `transactions` y `budgets`, sus índices, las políticas RLS y las funciones de importación/borrado.
+3. En **Authentication → Sign In / Providers**, habilita **Email** y deja activada la confirmación de correo.
+4. En **Authentication → URL Configuration**, configura:
+   - **Site URL:** `https://oficialmegamente4-creator.github.io/finanzas-pwa/`
+   - **Redirect URLs:** agrega esa misma URL y, para desarrollo local, `http://localhost:5173/`, `http://127.0.0.1:5173/` y `http://localhost:4173/`.
+5. Para probar el envío de confirmación o recuperación, el SMTP predeterminado de Supabase solo envía a integrantes de la organización y está limitado a 2 mensajes por hora. Para permitir registros de cualquier correo, configura un proveedor SMTP en **Authentication → SMTP Settings**. Revisa los [límites actuales del correo](https://supabase.com/docs/guides/auth/auth-smtp).
 
-## 10. Solución de problemas
+### Conectar el frontend local
+
+1. En **Connect** del proyecto, copia el **Project URL** y la **Publishable key** (`sb_publishable_...`). También puedes obtenerlas en **Settings → API Keys**.
+2. Copia `.env.example` como `.env.local` y completa:
+
+   ```dotenv
+   VITE_SUPABASE_URL=https://TU-PROYECTO.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_TU_CLAVE
+   ```
+
+3. Ejecuta `npm run dev`, crea una cuenta e inicia sesión. No pegues aquí la contraseña de PostgreSQL ni una clave `sb_secret_...` o `service_role`: la clave publicable es visible en una app web y las políticas RLS son las que protegen las filas.
+
+`.env.local` está excluido de Git. `.env.example` solo contiene nombres vacíos y sí se puede publicar.
+
+### Conectar GitHub Pages
+
+1. En el repositorio, abre **Settings → Secrets and variables → Actions → Variables** y crea estas dos variables con los mismos valores públicos del proyecto:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+2. En **Settings → Pages**, selecciona **GitHub Actions** como fuente. El workflow `.github/workflows/deploy.yml` compila la app con esas variables y publica `dist/` al hacer push a `main`.
+3. Revisa **Actions** y espera que los trabajos de compilación y publicación terminen correctamente. La app publicada es `https://oficialmegamente4-creator.github.io/finanzas-pwa/`.
+4. Abre esa URL y registra una cuenta. GitHub Actions comprueba ambas variables antes de compilar y no publica si falta una o si la clave no empieza con `sb_publishable_`. En desarrollo local sin variables, la app muestra el aviso de configuración en vez del formulario de acceso.
+
+GitHub Pages sirve su dominio `github.io` por HTTPS. Mantén la URL HTTPS y no agregues recursos HTTP mixtos; si usas un dominio personalizado, activa **Enforce HTTPS** en **Settings → Pages** cuando GitHub lo habilite. Consulta [publicar con GitHub Actions](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site) y [HTTPS en GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/securing-your-github-pages-site-with-https).
+
+### Comprobar aislamiento y sincronización
+
+La migración configura RLS y políticas separadas `SELECT`, `INSERT`, `UPDATE` y `DELETE` en cada tabla, todas limitadas a `auth.uid() = user_id`. Puedes revisar el SQL y las pruebas de aislamiento en `supabase/tests/database/finance_rls_test.sql`.
+
+Para ejecutar las pruebas de base de datos en un entorno local necesitas Docker Desktop y Supabase CLI:
+
+```sh
+npx supabase start
+npx supabase test db
+npx supabase stop
+```
+
+El proyecto incluye pruebas de interfaz de cuenta y caché que corren con `npm run test`. También ejecuta `npm run lint` y `npm run build`. Las pruebas locales no sustituyen una comprobación con un proyecto real: después de configurar credenciales, registra dos cuentas y confirma que cada una solo ve sus propios movimientos.
+
+## 10. Datos, actualizaciones y privacidad
+
+Al iniciar sesión, la app descarga los datos de la cuenta y guarda una copia local por usuario. Los cambios se envían a Supabase; si se pierde la conexión, los cambios compatibles quedan pendientes en la caché y se reintentan al volver a estar en línea. Los borrados y reemplazos de respaldos requieren conexión para confirmarse antes de cambiar los datos remotos.
+
+Al iniciar sesión en otro dispositivo se recuperan los datos de Supabase. Exporta un respaldo JSON desde **Ajustes** con regularidad. La migración de `localStorage` antiguo conserva la copia local hasta que se confirma la escritura en la nube; inicia sesión primero con la cuenta a la que deben pertenecer esos datos y no borres los datos del sitio antes de ver que terminó la migración. `localStorage` solo se comparte dentro del mismo navegador y origen (protocolo, dominio y puerto); si los datos están en una dirección distinta, exporta el respaldo en la versión antigua e impórtalo después de iniciar sesión en la nueva.
+
+Supabase Free tiene límites de uso y puede pausar proyectos con poca actividad durante una semana; al volver a abrirlos, los datos permanecen en el proyecto. Consulta los [límites actuales del plan Free](https://supabase.com/pricing) y [cómo funciona la pausa](https://supabase.com/docs/guides/platform/free-project-pausing). El plan Free no incluye copias de seguridad automáticas de base de datos, por eso conviene conservar respaldos JSON.
+
+La instalación requiere HTTPS o `localhost`. Cuando publicas una versión nueva, la PWA la descarga en segundo plano y muestra **Nueva versión disponible**. Pulsa **Actualizar** para aplicarla; la app consulta si hay actualizaciones cada hora cuando tiene conexión. Actualizar la app no borra los datos guardados en Supabase.
+
+## 11. Solución de problemas
 
 - **No aparece el botón de instalar:** verifica HTTPS, que el manifiesto y todos los iconos carguen, y abre el menú del navegador. En iOS usa Compartir → Añadir a pantalla de inicio.
 - **La app no se actualiza:** confirma que el sitio está en línea, recarga una vez y acepta el botón de actualización. En DevTools puedes revisar el estado del service worker.
 - **No cargan los iconos:** vuelve a ejecutar `npm run generate-pwa-assets` y confirma que los cuatro PNG tengan los nombres descritos arriba.
+- **Aviso de configuración de Supabase:** revisa que estén creadas las dos variables de GitHub Actions y vuelve a ejecutar el workflow desde **Actions**.
+- **No llega la confirmación o recuperación por correo:** revisa las URL de Auth y el SMTP; el SMTP predeterminado solo envía a integrantes del equipo de Supabase y tiene un límite bajo.
+- **La página avisa que no es segura:** abre la URL `https://oficialmegamente4-creator.github.io/finanzas-pwa/`, no una dirección `http://`. Para dominio propio, revisa DNS y **Enforce HTTPS** en Pages.
 - **Pantalla en blanco en GitHub Pages:** comprueba que Pages use GitHub Actions y que el repositorio se publique con `BASE_PATH=/<nombre-del-repositorio>/`. Vercel debe usar `/`.
 - **El respaldo no se importa:** acepta archivos JSON de hasta 5 MB; las entradas inválidas se rechazan antes de cambiar los datos.

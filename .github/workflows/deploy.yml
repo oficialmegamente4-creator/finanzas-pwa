@@ -31,10 +31,29 @@ jobs:
         run: npm ci
       - name: Generar iconos de la PWA
         run: npm run generate-pwa-assets
+      - name: Validar configuración segura de Supabase
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          if [[ -z "$VITE_SUPABASE_URL" || -z "$VITE_SUPABASE_PUBLISHABLE_KEY" ]]; then
+            echo "::error::Configura VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en Actions Variables antes de publicar."
+            exit 1
+          fi
+          if [[ "$VITE_SUPABASE_URL" != https://* ]]; then
+            echo "::error::VITE_SUPABASE_URL debe usar HTTPS."
+            exit 1
+          fi
+          if [[ "$VITE_SUPABASE_PUBLISHABLE_KEY" != sb_publishable_* ]]; then
+            echo "::error::Solo se permite una clave sb_publishable_; nunca configures sb_secret_ ni service_role."
+            exit 1
+          fi
       - name: Compilar para la subruta del repositorio
         run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
       - name: Preparar artefacto de Pages
         uses: actions/upload-pages-artifact@v4
         with:
