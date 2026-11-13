@@ -48,6 +48,21 @@ describe('pantalla de cuenta', () => {
     await waitFor(() => expect(auth.signIn).toHaveBeenCalledWith('persona@example.com', 'una-clave-segura'))
   })
 
+  it('bloquea el inicio de sesión si el correo no incluye @', async () => {
+    const user = userEvent.setup()
+    const auth = makeAuth()
+    render(<AuthScreen auth={auth} />)
+
+    const email = screen.getByLabelText('Correo electrónico') as HTMLInputElement
+    await user.type(email, 'persona-sin-arroba')
+    await user.type(screen.getByLabelText('Contraseña'), 'una-clave-segura')
+    await user.click(screen.getByRole('button', { name: 'Inicia sesión' }))
+
+    expect(auth.signIn).not.toHaveBeenCalled()
+    expect(email.validationMessage).toContain('@')
+    expect(screen.getByText('Debe incluir @, por ejemplo tu@correo.com.')).toBeTruthy()
+  })
+
   it('solicita el correo de recuperación de contraseña', async () => {
     const user = userEvent.setup()
     const auth = makeAuth()
